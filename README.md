@@ -187,11 +187,4 @@ Sugerido, como mínimo:
 2. **`02-task-stream.png`** — pestaña `/status` (Task Stream + Progress) capturada **mientras** corre `prefect_flow.py`, mostrando las tareas distribuidas entre los 3 workers.
 3. **`03-prefect-flow-graph.png`** — pestaña **Graph** del flow run en la UI de Prefect (http://localhost:4200/runs), idealmente capturada **mientras corre** (`Running`), mostrando las 6 ramas paralelas `clean_partition-0` … `clean_partition-5` abriéndose entre `reset_output_dataset` y `quality_gate`.
 
-Para incluirlas en este README, guarda el archivo en `docs/screenshots/` y agrega una línea así (ajusta el nombre de archivo y el texto alternativo):
 
-```markdown
-![Dashboard de Dask con 3 workers conectados](docs/screenshots/01-cluster-status.png)
-```
-
-> Tip: en Windows, `Win + Shift + S` abre el recorte de pantalla; guarda el PNG directamente en
-> `docs\screenshots\` dentro de la carpeta del repo.
