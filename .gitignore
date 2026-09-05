@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Datos generados/procesados (pesados, reproducibles vía scripts)
+shared-data/raw/*.csv
+shared-data/processed/*
+!shared-data/raw/.gitkeep
+!shared-data/processed/.gitkeep
