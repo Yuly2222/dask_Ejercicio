@@ -57,6 +57,20 @@ docker compose exec dask-scheduler python prefect_flow.py
    Stream real distribuido entre los 3 workers de Dask (cada partición Prefect delega su cómputo
    pesado a un worker distinto del clúster).
 
+   **Alternativa: correr solo con Dask, sin Prefect.** Si quieres ejecutar únicamente el DAG de
+   limpieza distribuida (sin orquestación, reintentos ni quality gates — solo Dask puro), usa en
+   cambio:
+
+   ```bash
+   docker compose exec dask-scheduler python cleaning_pipeline.py
+   ```
+
+   Esto conecta al clúster, corre el mismo `map_partitions` sobre los 6 CSV como un único DAG y
+   escribe el mismo `shared-data/processed/transactions_clean.parquet`. Verás el mismo Task Stream
+   en http://localhost:8787, pero nada en la UI de Prefect (`localhost:4200`), ya que este modo no
+   pasa por Prefect. Si vas a alternar entre este comando y `prefect_flow.py`, no hay problema:
+   ambos limpian el directorio de salida antes de escribir, así que no dejan archivos mezclados.
+
 5. El resultado limpio queda en `shared-data/processed/transactions_clean.parquet`, con las
    columnas `customer_code_clean`, `city_notes_clean` y `phone_clean`.
 

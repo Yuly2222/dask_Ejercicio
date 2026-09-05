@@ -11,6 +11,7 @@ Refactoriza:
 """
 import os
 import re
+import shutil
 import time
 
 import pandas as pd
@@ -150,8 +151,14 @@ def run_pipeline(raw_files, output_dir: str, scheduler_address: str) -> str:
         cleaned = ddf.map_partitions(_clean_partition, meta=_build_meta())
         cleaned = cleaned.drop(columns=RAW_TEXT_COLUMNS)
 
-        os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "transactions_clean.parquet")
+        # Borrado explícito en vez de confiar solo en overwrite=True: si el
+        # directorio ya tiene archivos con una convención de nombres distinta
+        # (p.ej. los 'part-NN.parquet' del modo fan-out de Prefect), el
+        # overwrite de Dask no siempre los reconoce/limpia correctamente.
+        if os.path.isdir(output_path):
+            shutil.rmtree(output_path)
+        os.makedirs(output_dir, exist_ok=True)
         cleaned.to_parquet(output_path, engine="pyarrow", write_index=False, overwrite=True)
         print(f"[OK] Pipeline distribuido completado -> {output_path}")
         return output_path
