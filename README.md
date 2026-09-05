@@ -185,8 +185,7 @@ Sugerido, como mínimo:
 
 1. **`01-cluster-status.png`** — pestaña `/status` con el scheduler y los 3 workers conectados (recursos, memoria) recién levantado el clúster (paso 2 del [Uso](#uso)).
 2. **`02-task-stream.png`** — pestaña `/status` (Task Stream + Progress) capturada **mientras** corre `prefect_flow.py`, mostrando las tareas distribuidas entre los 3 workers.
-3. **`03-worker-failure.png`** — pestaña `/status` justo después de `docker stop dask-worker-2`, mostrando solo 2 workers activos y las tareas reprogramadas (sección [Probar tolerancia a fallos](#probar-tolerancia-a-fallos)).
-4. **`04-prefect-flow-graph.png`** — pestaña **Graph** del flow run en la UI de Prefect (http://localhost:4200/runs), idealmente capturada **mientras corre** (`Running`), mostrando las 6 ramas paralelas `clean_partition-0` … `clean_partition-5` abriéndose entre `reset_output_dataset` y `quality_gate`.
+3. **`03-prefect-flow-graph.png`** — pestaña **Graph** del flow run en la UI de Prefect (http://localhost:4200/runs), idealmente capturada **mientras corre** (`Running`), mostrando las 6 ramas paralelas `clean_partition-0` … `clean_partition-5` abriéndose entre `reset_output_dataset` y `quality_gate`.
 
 Para incluirlas en este README, guarda el archivo en `docs/screenshots/` y agrega una línea así (ajusta el nombre de archivo y el texto alternativo):
 
