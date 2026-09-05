@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 generate_dirty_data.py
-Generador sintético de 300.000 registros con anomalías severas de calidad de datos.
+Generador sintético de 1.000.000 de registros con anomalías severas de calidad de datos.
 """
 import os
 import random
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 
-def generate_dirty_dataset(num_rows=300_000, output_dir="shared-data/raw"):
+def generate_dirty_dataset(num_rows=1_000_000, output_dir="shared-data/raw"):
     os.makedirs(output_dir, exist_ok=True)
     print(f"[*] Iniciando generación de {num_rows:,} filas con ruido sintético...")
 
@@ -92,12 +92,15 @@ def generate_dirty_dataset(num_rows=300_000, output_dir="shared-data/raw"):
         "business_category": categories
     })
 
-    # Guardar particionado en 6 archivos CSV (~50.000 filas c/u)
-    # Esto facilita que los 3 workers reciban chunks balanceados
+    # Guardar particionado en 6 archivos CSV balanceados
+    # Esto facilita que los 3 workers reciban chunks balanceados (2 c/u)
     num_chunks = 6
-    chunk_size = num_rows // num_chunks
+    # Límites por np.linspace en lugar de num_rows // num_chunks: evita perder
+    # las últimas filas cuando num_rows no es múltiplo exacto de num_chunks.
+    boundaries = np.linspace(0, num_rows, num_chunks + 1, dtype=int)
     for idx in range(num_chunks):
-        chunk_df = df.iloc[idx * chunk_size: (idx + 1) * chunk_size]
+        start, end = boundaries[idx], boundaries[idx + 1]
+        chunk_df = df.iloc[start:end]
         chunk_path = os.path.join(output_dir, f"transactions_dirty_part_{idx+1}.csv")
         chunk_df.to_csv(chunk_path, index=False, encoding="utf-8")
         print(f"  -> Generada partición {idx+1}/{num_chunks}: {chunk_path} ({len(chunk_df):,} filas)")

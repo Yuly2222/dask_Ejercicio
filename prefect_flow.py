@@ -2,22 +2,27 @@
 """
 prefect_flow.py
 Orquestación del pipeline distribuido con Prefect: valida infraestructura,
-verifica datos crudos, ejecuta el DAG de limpieza sobre el clúster Dask y
-aplica quality gates sobre el resultado final.
+verifica datos crudos, somete la limpieza de cada partición como una tarea
+independiente (fan-out concurrente, visible como varios 'hilos' de ejecución
+paralelos en el grafo del flow run) y aplica quality gates sobre el resultado
+final consolidado.
 """
 import os
+import shutil
 from pathlib import Path
 
 import dask.dataframe as dd
 from dask.distributed import Client
 from prefect import flow, task, get_run_logger
+from prefect.task_runners import ConcurrentTaskRunner
 
-from cleaning_pipeline import run_pipeline, ANOMALY_TOKEN
+from cleaning_pipeline import submit_partition_cleaning, ANOMALY_TOKEN
 
 RAW_DIR = os.environ.get("RAW_DIR", "shared-data/raw")
 PROCESSED_DIR = os.environ.get("PROCESSED_DIR", "shared-data/processed")
 SCHEDULER_ADDRESS = os.environ.get("DASK_SCHEDULER_ADDRESS", "tcp://dask-scheduler:8786")
-EXPECTED_ROWS = 300_000
+EXPECTED_ROWS = 1_000_000
+OUTPUT_DATASET_DIR = os.path.join(PROCESSED_DIR, "transactions_clean.parquet")
 
 
 @task(retries=3, retry_delay_seconds=5)
@@ -52,25 +57,46 @@ def validate_raw_data() -> list[str]:
     return files
 
 
-@task(retries=2, retry_delay_seconds=10)
-def run_cleaning_dag(raw_files: list[str]) -> str:
-    """Somete el DAG de limpieza y refactorización al clúster Dask."""
+@task
+def reset_output_dataset() -> str:
+    """Limpia el directorio Parquet de salida antes del fan-out concurrente,
+    para que cada partición escriba su propio archivo sin colisiones con
+    corridas anteriores."""
     logger = get_run_logger()
-    output_path = run_pipeline(raw_files, PROCESSED_DIR, SCHEDULER_ADDRESS)
-    logger.info(f"DAG de limpieza completado. Resultado en: {output_path}")
-    return output_path
+    if os.path.isdir(OUTPUT_DATASET_DIR):
+        shutil.rmtree(OUTPUT_DATASET_DIR)
+    os.makedirs(OUTPUT_DATASET_DIR, exist_ok=True)
+    logger.info(f"Directorio de salida reiniciado: {OUTPUT_DATASET_DIR}")
+    return OUTPUT_DATASET_DIR
+
+
+@task(retries=2, retry_delay_seconds=10, name="clean_partition")
+def clean_partition_task(raw_file: str, part_index: int) -> str:
+    """Limpia UNA partición de forma independiente. `main_flow` somete una
+    instancia de esta task por cada archivo crudo vía `.submit()`, lo que hace
+    que Prefect las ejecute en paralelo (varios 'hilos' concurrentes visibles
+    en el grafo del flow run), mientras cada una delega su cómputo pesado a un
+    worker del clúster Dask."""
+    logger = get_run_logger()
+    part_path = submit_partition_cleaning(raw_file, OUTPUT_DATASET_DIR, SCHEDULER_ADDRESS, part_index)
+    logger.info(f"Partición {part_index} ({raw_file}) limpiada -> {part_path}")
+    return part_path
 
 
 @task
-def quality_gate(output_path: str) -> dict:
-    """Aplica aserciones de calidad sobre el resultado final antes de darlo
-    por válido: cardinalidad esperada y proporción de anomalías bajo control."""
+def quality_gate(output_dataset_dir: str) -> dict:
+    """Aplica aserciones de calidad sobre el resultado final consolidado
+    (todas las particiones ya escritas): cardinalidad esperada y proporción
+    de anomalías bajo control."""
     logger = get_run_logger()
-    ddf = dd.read_parquet(output_path)
-    total = len(ddf)
-    anomalies = int((ddf["customer_code_clean"] == ANOMALY_TOKEN).sum().compute())
-    null_notes = int(ddf["city_notes_clean"].isna().sum().compute())
-    null_phones = int(ddf["phone_clean"].isna().sum().compute())
+    # Cliente explícito: al correr esta task en su propio hilo (ConcurrentTaskRunner),
+    # no hay un Client Dask "ambient" activo en ese hilo para el .compute().
+    with Client(SCHEDULER_ADDRESS) as client:
+        ddf = dd.read_parquet(output_dataset_dir)
+        total = len(ddf)
+        anomalies = int((ddf["customer_code_clean"] == ANOMALY_TOKEN).sum().compute())
+        null_notes = int(ddf["city_notes_clean"].isna().sum().compute())
+        null_phones = int(ddf["phone_clean"].isna().sum().compute())
     anomaly_ratio = anomalies / total if total else 0.0
 
     metrics = {
@@ -88,13 +114,24 @@ def quality_gate(output_path: str) -> dict:
     return metrics
 
 
-@flow(name="dask-cleaning-pipeline")
+@flow(name="dask-cleaning-pipeline", task_runner=ConcurrentTaskRunner())
 def main_flow() -> dict:
     n_workers = validate_infrastructure()
     raw_files = validate_raw_data()
-    output_path = run_cleaning_dag(raw_files)
-    metrics = quality_gate(output_path)
+    reset_output_dataset()
+
+    # Fan-out: una task por partición, sometidas concurrentemente. En la UI de
+    # Prefect (http://localhost:4200) el grafo del flow run muestra estas 6
+    # ramas paralelas entre validate_raw_data y quality_gate.
+    futures = [
+        clean_partition_task.submit(raw_file, idx)
+        for idx, raw_file in enumerate(raw_files)
+    ]
+    part_paths = [future.result() for future in futures]
+
+    metrics = quality_gate(OUTPUT_DATASET_DIR)
     metrics["workers_conectados"] = n_workers
+    metrics["particiones_procesadas"] = len(part_paths)
     return metrics
 
 

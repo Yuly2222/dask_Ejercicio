@@ -2,12 +2,31 @@ networks:
   dask-cluster-net:
     driver: bridge
 
+volumes:
+  prefect-data:
+
 services:
+  prefect-server:
+    build: .
+    container_name: prefect-server
+    hostname: prefect-server
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200" # Prefect Dashboard/API
+    networks:
+      - dask-cluster-net
+    volumes:
+      - prefect-data:/root/.prefect
+
   dask-scheduler:
     build: .
     container_name: dask-scheduler
     hostname: dask-scheduler
     command: dask scheduler --host 0.0.0.0
+    depends_on:
+      - prefect-server
+    environment:
+      - PREFECT_API_URL=http://prefect-server:4200/api
     ports:
       - "8786:8786" # IPC (comunicación scheduler <-> workers/cliente)
       - "8787:8787" # Dask Dashboard
