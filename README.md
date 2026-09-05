@@ -71,3 +71,33 @@ Observa en el Dashboard cómo el scheduler reprograma las tareas del worker caí
 | [`cleaning_pipeline.py`](cleaning_pipeline.py) | DAG de limpieza distribuida (regex, mojibake, teléfonos) sobre Dask |
 | [`prefect_flow.py`](prefect_flow.py) | Orquestación (`@flow`/`@task`), reintentos y quality gates |
 | [`ANALISIS.md`](ANALISIS.md) | Respuestas a las preguntas de reflexión arquitectónica |
+
+## Rúbrica de Evaluación
+
+Mapeo de cada criterio del taller a su evidencia concreta en este repositorio:
+
+| Criterio | Ponderación | Evidencia en este repo |
+|---|---|---|
+| **Infraestructura Docker y Clúster** | 20% | [`docker-compose.yml`](docker-compose.yml): 1 scheduler + 3 workers independientes, red `dask-cluster-net`, volumen `shared-data` compartido, límites de recursos (`cpus`/`mem_limit`) por contenedor. Capturas: [dashboard con 3 workers](#capturas-de-pantalla--evidencia). |
+| **Script Generador y Datos Sucios** | 20% | [`generate_dirty_data.py`](generate_dirty_data.py): 300.000 filas en 6 CSV, con mojibake, nulos y heterogeneidad regex inyectados probabilísticamente. |
+| **Refactorización y Limpieza Dask** | 35% | [`cleaning_pipeline.py`](cleaning_pipeline.py): extracción regex a `CUST-XXXXX`/token de anomalía, reparación de mojibake UTF-8↔Latin-1, normalización de teléfonos, todo vía `map_partitions` distribuido y escrito a Parquet. |
+| **Orquestación Prefect y Análisis** | 25% | [`prefect_flow.py`](prefect_flow.py): `@flow`/`@task` con reintentos, validación de infraestructura/datos y `quality_gate` con aserciones; [`ANALISIS.md`](ANALISIS.md): respuestas fundamentadas a las 4 preguntas arquitectónicas. |
+
+## Capturas de Pantalla / Evidencia
+
+Las capturas del Dashboard de Dask (http://localhost:8787) van en [`docs/screenshots/`](docs/screenshots/).
+Sugerido, como mínimo:
+
+1. **`01-cluster-status.png`** — pestaña `/status` con el scheduler y los 3 workers conectados (recursos, memoria) recién levantado el clúster (paso 2 del [Uso](#uso)).
+2. **`02-task-stream.png`** — pestaña `/status` (Task Stream + Progress) capturada **mientras** corre `prefect_flow.py`, mostrando las tareas distribuidas entre los 3 workers.
+3. **`03-worker-failure.png`** — pestaña `/status` justo después de `docker stop dask-worker-2`, mostrando solo 2 workers activos y las tareas reprogramadas (sección [Probar tolerancia a fallos](#probar-tolerancia-a-fallos)).
+4. **`04-prefect-flow-run.png`** (opcional) — salida de consola o UI de Prefect mostrando el flujo `dask-cleaning-pipeline` completado con sus tasks (`validate_infrastructure`, `validate_raw_data`, `run_cleaning_dag`, `quality_gate`).
+
+Para incluirlas en este README, guarda el archivo en `docs/screenshots/` y agrega una línea así (ajusta el nombre de archivo y el texto alternativo):
+
+```markdown
+![Dashboard de Dask con 3 workers conectados](docs/screenshots/01-cluster-status.png)
+```
+
+> Tip: en Windows, `Win + Shift + S` abre el recorte de pantalla; guarda el PNG directamente en
+> `docs\screenshots\` dentro de la carpeta del repo.
